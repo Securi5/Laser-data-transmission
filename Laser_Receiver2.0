@@ -1,0 +1,141 @@
+#include <math.h>
+
+int bitLength = 500000;
+int input = 34;
+
+struct data{
+  int value;
+  long duration;
+};
+
+data pulse;
+TaskHandle_t Task1;
+QueueHandle_t commandQueue;
+
+
+void setup() {
+  Serial.begin(115200);
+  commandQueue = xQueueCreate(10, sizeof(data));
+  Serial.println("Started");
+  xTaskCreatePinnedToCore(
+    timeTask,
+    "timeTask",
+    10000,
+    NULL,
+    0,
+    &Task1,
+    0
+  );
+}
+
+void timeTask(void * parameter){
+  unsigned long start;
+  unsigned long stop;
+  bool checkingDuration = false;
+
+  for(;;){
+    int currentValue = analogRead(input);
+
+    if (!checkingDuration){
+      pulse.value = currentValue;
+      checkingDuration = true;
+      start = micros();
+    }
+
+    if (checkingDuration && abs(currentValue - pulse.value) > 2000){
+      stop = micros();
+      pulse.duration = stop - start;
+      checkingDuration = false;
+      xQueueSend(commandQueue, &pulse, portMAX_DELAY);
+    }
+
+  }
+}
+
+
+
+
+
+
+
+bool synced = false;
+data incoming;
+int bitCounter = - 1;
+int charNumber = 0;
+void loop() {
+  if(xQueueReceive(commandQueue, &incoming, portMAX_DELAY)){
+    //Serial.print("Raw pulse: value=");
+    //Serial.print(incoming.value);
+    //Serial.print(" duration=");
+    //Serial.println(incoming.duration);
+    //Serial.print("Synced=");
+    //Serial.print(synced);
+    //Serial.print(" bitCounter=");
+    //Serial.println(bitCounter);*/
+
+    if(synced){
+      //Serial.println("synced");
+      if(labs(incoming.duration - 500000L) < 5000){ // if not a stop bit
+        //Serial.println("Synced and 1 bit length");
+        bitCounter++;
+        if(bitCounter > 0 && bitCounter < 9 && incoming.value < 1000){
+        
+          charNumber |= (1 << (8 - bitCounter)); 
+        }
+      }
+      else if(labs(incoming.duration - 750000L) < 10000){ //if stop bit
+        if (bitCounter != 9){
+          synced = false;
+          charNumber = 0;
+          Serial.println("Lost sync: bitCounter exceeded 9");
+        }
+        else{
+          bitCounter = -1;
+          Serial.print((char)(charNumber));
+          //Serial.print(charNumber);
+          charNumber = 0;
+        }
+      }
+      else if (labs(incoming.duration - 750000L) > 1000){
+        long remaining = incoming.duration;
+        int count = 0;
+        while(remaining >= bitLength * 0.5){
+          //Serial.println(incoming.value);
+          remaining = remaining - 500000;
+          count++;
+          bitCounter++;
+          if(incoming.value < 1000 && bitCounter < 9){
+            charNumber |= (1 << (8 - bitCounter));
+          }
+          if(bitCounter == 9 && labs(incoming.duration - 500000L) < 1000){
+            charNumber = 0;
+            bitCounter = -1;
+          }
+          //Serial.print("looped - bitCount:");
+          //Serial.println(bitCounter);
+          //Serial.println(remaining);
+        }
+        //Serial.print("While count=");
+        //Serial.println(count);
+      }
+    }
+
+    if (!synced && labs(incoming.duration - 750000L) < 10000 && incoming.value > 2000){
+      synced = true;
+      bitCounter = -1;
+      Serial.println("Synced: start of frame detected");
+    }
+
+    if(bitCounter > 9){
+      synced = false;
+      Serial.println("Lost sync: bitCounter exceeded 9");
+      bitCounter = -1;
+      charNumber = 0;
+    }
+    /*if (bitCounter >= 9){
+      bitCounter = -1;
+      synced = false;
+      charNumber = 0;
+    }*/
+  }
+}
