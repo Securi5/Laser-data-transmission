@@ -1,0 +1,30 @@
+char message[] = "Hello World!\n";
+int bitLength = 50;
+
+void setup() {
+  pinMode(3, OUTPUT);
+}
+
+void loop() {
+  for (int i = 0; i < strlen(message); i++) {
+    int ascii = message[i];
+
+    digitalWrite(3, LOW);
+    delay(bitLength);
+
+    for (int b = 0; b < 8; b++) {
+      if (((ascii >> (7 - b)) & 1) == 1) {
+        digitalWrite(3, LOW);
+      } else {
+        digitalWrite(3, HIGH);
+      }
+      delay(bitLength);
+    }
+
+    digitalWrite(3, LOW);
+    delay(bitLength);
+
+    digitalWrite(3, HIGH);
+    delay(1.5 * bitLength);
+  }
+}
