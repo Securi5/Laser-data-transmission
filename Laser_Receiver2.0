@@ -1,8 +1,10 @@
 #include <math.h>
 
-int bitLength = 500000;
+long bitLength = 50000;
 int input = 34;
-
+int valueTolerance = 3200; //logic 0 is when analogRead() > tolerance, logic 1 is when analogRead() < tolerance
+int durationTolerance = 5000;
+int edgeTolerance = 300;
 struct data{
   int value;
   long duration;
@@ -42,7 +44,7 @@ void timeTask(void * parameter){
       start = micros();
     }
 
-    if (checkingDuration && abs(currentValue - pulse.value) > 2000){
+    if (checkingDuration && abs(currentValue - pulse.value) > edgeTolerance){
       stop = micros();
       pulse.duration = stop - start;
       checkingDuration = false;
@@ -53,37 +55,23 @@ void timeTask(void * parameter){
 }
 
 
-
-
-
-
-
 bool synced = false;
 data incoming;
 int bitCounter = - 1;
 int charNumber = 0;
 void loop() {
   if(xQueueReceive(commandQueue, &incoming, portMAX_DELAY)){
-    //Serial.print("Raw pulse: value=");
-    //Serial.print(incoming.value);
-    //Serial.print(" duration=");
-    //Serial.println(incoming.duration);
-    //Serial.print("Synced=");
-    //Serial.print(synced);
-    //Serial.print(" bitCounter=");
-    //Serial.println(bitCounter);*/
-
+    
     if(synced){
       //Serial.println("synced");
-      if(labs(incoming.duration - 500000L) < 5000){ // if not a stop bit
-        //Serial.println("Synced and 1 bit length");
+      if(labs(incoming.duration - bitLength) < durationTolerance){ // if not a stop bit
         bitCounter++;
-        if(bitCounter > 0 && bitCounter < 9 && incoming.value < 1000){
+        if(bitCounter > 0 && bitCounter < 9 && incoming.value < valueTolerance){
         
           charNumber |= (1 << (8 - bitCounter)); 
         }
       }
-      else if(labs(incoming.duration - 750000L) < 10000){ //if stop bit
+      else if(labs(incoming.duration - (1.5 * bitLength)) < durationTolerance){ //if stop bit
         if (bitCounter != 9){
           synced = false;
           charNumber = 0;
@@ -92,35 +80,28 @@ void loop() {
         else{
           bitCounter = -1;
           Serial.print((char)(charNumber));
-          //Serial.print(charNumber);
           charNumber = 0;
         }
       }
-      else if (labs(incoming.duration - 750000L) > 1000){
+      else if (labs(incoming.duration - (1.5 * bitLength)) > valueTolerance){
         long remaining = incoming.duration;
         int count = 0;
         while(remaining >= bitLength * 0.5){
-          //Serial.println(incoming.value);
-          remaining = remaining - 500000;
+          remaining = remaining - bitLength;
           count++;
           bitCounter++;
-          if(incoming.value < 1000 && bitCounter < 9){
+          if(incoming.value < 3000 && bitCounter < 9){
             charNumber |= (1 << (8 - bitCounter));
           }
-          if(bitCounter == 9 && labs(incoming.duration - 500000L) < 1000){
+          if(bitCounter == 9 && labs(incoming.duration - bitLength) < durationTolerance){
             charNumber = 0;
             bitCounter = -1;
           }
-          //Serial.print("looped - bitCount:");
-          //Serial.println(bitCounter);
-          //Serial.println(remaining);
         }
-        //Serial.print("While count=");
-        //Serial.println(count);
       }
     }
 
-    if (!synced && labs(incoming.duration - 750000L) < 10000 && incoming.value > 2000){
+    if (!synced && labs(incoming.duration - (1.5 * bitLength)) < durationTolerance && incoming.value > valueTolerance){
       synced = true;
       bitCounter = -1;
       Serial.println("Synced: start of frame detected");
@@ -132,10 +113,5 @@ void loop() {
       bitCounter = -1;
       charNumber = 0;
     }
-    /*if (bitCounter >= 9){
-      bitCounter = -1;
-      synced = false;
-      charNumber = 0;
-    }*/
   }
 }
