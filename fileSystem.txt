@@ -1,0 +1,8 @@
+File system:
+
+There is a frame with a heading bit of 1 that declares the number of characters in teh file extension.
+For example:
+a .txt header frame would be {1}     {1}      {00000011}   {1}{0}
+                              ^       ^           ^         ^  ^
+                              Start   Heading     Number   Stop Bits
+                              Bit     Bit         of char
